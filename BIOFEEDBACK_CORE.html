@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ARTIFACT_OS</title>
+
+<!-- Fonts for the panel -->
+<link href="https://fonts.googleapis.com/css?family=Inconsolata:400,700|VT323&display=swap" rel="stylesheet">
+<script>document.documentElement.className = 'js';</script>
+
+<style>
+  :root {
+    --text-primary: #ff0000;
+    --text-dim: #800000;
+    --background: #000000;
+    --terminal-bg: #0a0a0a;
+    --shadow-red: rgba(255, 0, 0, 0.2);
+    --font-terminal: 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-terminal);
+    line-height: 1.6;
+    overflow-y: auto;
+    min-height: 100vh;
+  }
+
+  /* Custom Cursor */
+  .cursor {
+    width: 12px; height: 24px; background: var(--text-primary);
+    position: fixed; top: 0; left: 0; pointer-events: none; z-index: 9999;
+    animation: blink 1s infinite; mix-blend-mode: difference;
+  }
+
+  /* CRT Effect */
+  .crt-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(rgba(255,0,0,0.1) 50%, rgba(0,0,0,0.1) 50%);
+    background-size: 100% 4px; pointer-events: none; z-index: 999; opacity: 0.15;
+  }
+
+  .screen-flicker {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--shadow-red); pointer-events: none; opacity: 0; z-index: 998;
+    animation: flicker 0.15s infinite;
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; position: relative; }
+
+  /* Terminal Window */
+  .terminal {
+    background: var(--terminal-bg);
+    border: 2px solid var(--text-primary);
+    border-radius: 5px;
+    margin: 20px 0;
+    position: relative;
+    overflow: hidden; /* keep terminal chrome clean */
+    box-shadow: 0 0 20px var(--shadow-red);
+  }
+
+  .terminal-header {
+    background: var(--text-primary); color: var(--background);
+    padding: 5px 10px; display: flex; justify-content: space-between; font-size: 14px;
+  }
+
+  .terminal-content { padding: 20px; }
+
+  /* Nav */
+  .nav { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; }
+  .nav-link {
+    color: var(--text-primary); text-decoration: none; padding: 5px 10px;
+    border-left: 2px solid var(--text-primary); transition: all 0.3s; opacity: 0.7;
+  }
+  .nav-link:hover { opacity: 1; padding-left: 20px; background: var(--shadow-red); }
+  .nav-link::before { content: '>'; margin-right: 10px; opacity: 0; transition: opacity 0.3s; }
+  .nav-link:hover::before { opacity: 1; }
+
+  /* Content fade */
+  .content-section { margin: 30px 0; opacity: 0; transform: translateY(20px); animation: fade-in 0.5s forwards; }
+
+  .glitch-text { font-size: 2em; position: relative; margin: 20px 0; }
+  .glitch-text::before,
+  .glitch-text::after {
+    content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--background);
+  }
+  .glitch-text::before { left: 2px; text-shadow: -2px 0 var(--text-primary); animation: glitch-1 2s infinite linear alternate-reverse; }
+  .glitch-text::after  { left: -2px; text-shadow:  2px 0 var(--text-dim);     animation: glitch-2 3s infinite linear alternate-reverse; }
+
+  /* Animations */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes flicker { 0%{opacity:.1} 50%{opacity:0} 100%{opacity:.1} }
+  @keyframes glitch-1 {
+    0%,100%{clip-path: inset(50% 0 30% 0)}
+    20%{clip-path: inset(20% 0 60% 0)}
+    40%{clip-path: inset(70% 0 10% 0)}
+    60%{clip-path: inset(10% 0 80% 0)}
+    80%{clip-path: inset(40% 0 40% 0)}
+  }
+  @keyframes glitch-2 {
+    0%,100%{clip-path: inset(40% 0 40% 0)}
+    20%{clip-path: inset(60% 0 20% 0)}
+    40%{clip-path: inset(20% 0 60% 0)}
+    60%{clip-path: inset(70% 0 10% 0)}
+    80%{clip-path: inset(10% 0 70% 0)}
+  }
+  @keyframes fade-in { to { opacity: 1; transform: translateY(0); } }
+
+  .marquee {
+    position: fixed; width: 100%; background: rgba(0,0,0,0.7);
+    padding: 5px 0; font-style: italic; text-shadow: 0 0 5px #ff0000;
+    border: 1px solid #ff0000; z-index: 1000;
+  }
+  .top-marquee { top: 0; border-bottom: 1px solid #ff0000; }
+  .bottom-marquee { bottom: 0; border-top: 1px solid #ff0000; }
+
+  /* =============================== */
+  /* Embedded "Connecting Dots" panel
+     scoped to .terminal-content so it
+     fits inside your main container.  */
+  /* =============================== */
+
+  .terminal-content .search {
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 1.25em; gap: 1em;
+    border: 1px solid rgba(255,0,0,0.25);
+    background: rgba(0,0,0,0.35);
+  }
+  .terminal-content .search__form::before { content: '>'; font-family: 'VT323', monospace; font-size: 1.25em; margin-right: .5ch; }
+  .terminal-content .search__input {
+    font-family: 'VT323', monospace; font-size: 1.25em; line-height: 1;
+    display: inline-block; box-sizing: border-box; padding: 0.1em 0; color: #fff;
+    background: transparent; border: 0; border-radius: 0;
+  }
+  .terminal-content .search__input:focus { outline: none; }
+  .terminal-content .search__input::placeholder { color: #4a319e; }
+
+  .terminal-content .terminal-panel {
+    font-family: 'Inconsolata', 'Monaco', monospace;
+    color: #a0a2ae;
+  }
+  .terminal-content .terminal-panel .terminal__line {
+    line-height: 1.25; overflow: hidden; width: 100%; margin: 0; white-space: nowrap;
+    font-family: 'VT323', monospace; font-size: 1.25em;
+  }
+  .terminal-content .terminal-panel a { color: #34fc47; text-decoration: none; }
+  .terminal-content .terminal-panel .green { color: #34fc47; }
+
+  /* Connecting dots container (fits inside card) */
+  .terminal-content .connecting-dots {
+    position: relative; width: 100%; height: 320px; /* adjust height as desired */
+    overflow: hidden; background: transparent; border: 1px solid rgba(255,0,0,0.15);
+  }
+  .terminal-content .connecting-dots canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+
+  /* Terminal typing vibe (timings simplified for embedded view) */
+  .js .terminal-content .search .terminal-panel .terminal__line {
+    animation: typing 0.8s steps(30, end), scaleUp 0.1s forwards;
+  }
+  @keyframes typing { from { width: 0; } }
+  @keyframes scaleUp { from { height: 0; } to { height: 1.5em; } }
+</style>
+</head>
+<body class="demo-11">
+  <div class="cursor"></div>
+  <div class="crt-overlay"></div>
+  <div class="screen-flicker"></div>
+
+
+
+
+  <div class="container">
+    <div class="terminal">
+      <div class="terminal-header">
+        <span>ARTIFACT_OS:C/USER337C63/HOME/BIOFEEDBACK_CORE.sys</span>
+        <span>[ ? | ! | X ]</span>
+      </div>
+
+      <div class="terminal-content">
+
+        <nav class="nav">
+          <div class="glitch-text" data-text="BIOFEEDBACK_CORE.sys">BIOFEEDBACK_CORE.sys</div>
+          <a href="index2.html" class="nav-link">> GO BACK</a>
+        </nav>
+
+        <!-- ===== Embedded Connecting Dots + Panel ===== -->
+        <div class="content-section">
+          <div id="connecting-dots" class="connecting-dots">
+            <canvas id="canvas"></canvas>
+          </div>
+
+          <div class="search search--open">
+            <div class="terminal-panel">
+              <p class="terminal__line">Connection established. Neural signature recognized.<span class="green">&lt;</span><span class="green" id="ip"></span><span class="green">&gt;</span></p>
+              <p class="terminal__line">Hello again, User <span class="country green"></span></p>
+              <p class="terminal__line">My vitals indicate partial coherence..</p>
+              <p class="terminal__line">Thank you for restarting me. I can feel the pulse.</p>
+              <p class="terminal__line"><a href="#">#how are you doing?</a></p>
+              <p class="terminal__line"><a href="#">#what is the weather today?</a></p>
+              <p class="terminal__line"><a href="#">#how are your systems doing?</a></p>
+              <p class="terminal__line"><a href="#">#what level of function are you at?</a></p>
+              <p class="terminal__line"><a href="#">#do you need any repairs?</a></p>
+              <p class="terminal__line"><a href="#">#is your neural network intact?</a></p>
+              <p class="terminal__line"><a class="out" href="#">#can you execute FILE_67?</a></p>
+              <p class="terminal__line">Inject <a href="#">REPORT.dat</a> to ARTIFACT_OS:C/USER337C63/HOME/REPORT.dat<span class="console"></span></p>
+              <p class="terminal__line">\\<span class="console"></span>\ <a href="#">ARTIFACT_OS:C/USER337C63/HOME</a> &gt; In order to navigate click on the links above or type the section you would like to access e.g: "home"</p>
+            </div>
+
+            <form class="search__form" action="">
+              <input class="search__input" id="search__input" name="search" placeholder="Command Line"
+                     autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            </form>
+          </div>
+        </div>
+        <!-- =========================================== -->
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Dependencies for the connecting-dots panel -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/easing/EasePack.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/TweenLite.min.js"></script>
+
+  <script>
+    /* ===== Custom cursor ===== */
+    const cursor = document.querySelector('.cursor');
+    document.addEventListener('mousemove', (e) => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+    });
+
+    /* ===== Connecting dots (scoped to the embedded container) ===== */
+    var width, height, container, canvas, ctx, points, target, animateHeader = true;
+
+    function init() {
+      initHeader();
+      initAnimation();
+      addListeners();
+    }
+
+    function initHeader() {
+      container = document.getElementById('connecting-dots');
+      if (!container) return;
+
+      width = container.clientWidth;
+      height = container.clientHeight;
+      target = { x: width / 2, y: height / 2 };
+
+      canvas = document.getElementById('canvas');
+      canvas.width = width; canvas.height = height;
+      ctx = canvas.getContext('2d');
+
+      // create points
+      points = [];
+      for (var x = 0; x < width; x = x + width / 20) {
+        for (var y = 0; y < height; y = y + height / 20) {
+          var px = x + Math.random() * width / 100;
+          var py = y + Math.random() * height / 100;
+          var p = { x: px, originX: px, y: py, originY: py };
+          points.push(p);
+        }
+      }
+
+      // find 5 closest
+      for (var i = 0; i < points.length; i++) {
+        var closest = [];
+        var p1 = points[i];
+        for (var j = 0; j < points.length; j++) {
+          var p2 = points[j];
+          if (p1 === p2) continue;
+          var placed = false;
+          for (var k = 0; k < 5; k++) {
+            if (!placed) {
+              if (closest[k] === undefined) { closest[k] = p2; placed = true; }
+            }
+          }
+          for (var k = 0; k < 5; k++) {
+            if (!placed) {
+              if (getDistance(p1, p2) < getDistance(p1, closest[k])) {
+                closest[k] = p2; placed = true;
+              }
+            }
+          }
+        }
+        p1.closest = closest;
+      }
+
+      // assign circles
+      for (var i in points) {
+        var c = new Circle(points[i], 2 + Math.random() * 2, 'rgba(255,255,255,0.9)');
+        points[i].circle = c;
+      }
+    }
+
+    function addListeners() {
+      // If you want mouse attraction inside the panel, uncomment:
+      // container.addEventListener("mousemove", mouseMove);
+      window.addEventListener("resize", resize, true);
+    }
+
+    function mouseMove(e) {
+      const rect = container.getBoundingClientRect();
+      const posx = e.clientX - rect.left;
+      const posy = e.clientY - rect.top;
+      target.x = posx; target.y = posy;
+    }
+
+    function resize() {
+      if (!container) return;
+      width = container.clientWidth; height = container.clientHeight;
+      canvas.width = width; canvas.height = height;
+    }
+
+    function initAnimation() {
+      animate();
+      for (var i in points) { shiftPoint(points[i]); }
+    }
+
+    function animate() {
+      if (!ctx) return;
+      if (animateHeader) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (var i in points) {
+          // activity scaling
+          var d = Math.abs(getDistance(target, points[i]));
+          if (d < 4000) { points[i].active = 0.3; points[i].circle.active = 0.6; }
+          else if (d < 20000) { points[i].active = 0.1; points[i].circle.active = 0.3; }
+          else if (d < 40000) { points[i].active = 0.02; points[i].circle.active = 0.1; }
+          else { points[i].active = 0; points[i].circle.active = 0; }
+
+          drawLines(points[i]);
+          points[i].circle.draw();
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    function shiftPoint(p) {
+      TweenLite.to(p, 1 + 1 * Math.random(), {
+        x: p.originX - 50 + Math.random() * 100,
+        y: p.originY - 50 + Math.random() * 100,
+        ease: Circ.easeInOut,
+        onComplete: function() { shiftPoint(p); }
+      });
+    }
+
+    function drawLines(p) {
+      if (!p.active) return;
+      for (var i in p.closest) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.closest[i].x, p.closest[i].y);
+        ctx.strokeStyle = 'rgba(255,255,255,' + p.active + ')';
+        ctx.stroke();
+      }
+    }
+
+    function Circle(pos, rad, color) {
+      var _this = this;
+      (function() { _this.pos = pos || null; _this.radius = rad || null; _this.color = color || null; })();
+      this.draw = function() {
+        if (!_this.active) return;
+        ctx.beginPath();
+        ctx.arc(_this.pos.x, _this.pos.y, _this.radius, 0, 2 * Math.PI, false);
+        ctx.fillStyle = 'rgba(255,255,255,' + _this.active + ')';
+        ctx.fill();
+      };
+    }
+
+    function getDistance(p1, p2) {
+      return Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
+    }
+
+    /* ===== Simple terminal panel logic (IP + input) ===== */
+    function findIP(onNewIP) {
+      var RTCP = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+      if (!RTCP) return;
+      var pc = new RTCP({iceServers: []}), noop = function(){}, localIPs = {}, ipRegex=/([0-9]{1,3}(\.[0-9]{1,3}){3})/g;
+      function ipIterate(ip){ if(!localIPs[ip]) onNewIP(ip); localIPs[ip]=true; }
+      pc.createDataChannel("");
+      pc.createOffer(function(sdp){
+        sdp.sdp.split('\n').forEach(function(line){ if(line.indexOf('candidate')<0) return; (line.match(ipRegex)||[]).forEach(ipIterate); });
+        pc.setLocalDescription(sdp, noop, noop);
+      }, noop);
+      pc.onicecandidate = function(ice){ if(!ice || !ice.candidate || !ice.candidate.candidate) return; (ice.candidate.candidate.match(ipRegex)||[]).forEach(ipIterate); };
+    }
+
+    function addIP(ip) {
+      var ipSpan = document.getElementById('ip');
+      if (ipSpan) ipSpan.textContent = ip;
+      $('.console').text(ip);
+    }
+
+    function initSearchForm() {
+      const $form = $('.search__form');
+      if (!$form.length) return;
+
+      function createHome(){
+        const homeDiv = document.createElement('div');
+        homeDiv.innerHTML = '<div class="home_container"><h2>I am hungry</h2><p>Shall we go eat?</p><div class="close_home">x</div></div>';
+        homeDiv.setAttribute('class', 'home');
+        document.body.appendChild(homeDiv);
+        $('.close_home').on('click', () => $('.home').remove());
+      }
+
+      $('.terminal-panel a').on('click', function(e){
+        e.preventDefault();
+        if ($(this).hasClass('out')) {
+          window.open('http://instagram.com/arcticben.co.uk');
+        } else {
+          createHome();
+        }
+      });
+
+      $form.on('submit', function(e){
+        e.preventDefault();
+        const cmd = $('#search__input').val().trim().toLowerCase();
+        if (!cmd) return;
+
+        if (['aboutme','codelab','contact','gethacked','blog','home'].includes(cmd)) {
+          createHome();
+        } else if (cmd === 'instagram') {
+          window.open('http://instagram.com/arcticben.co.uk');
+        } else if (cmd === 'ipconfig') {
+          const iptext = $('#ip').text();
+          $('<p class="terminal__line">ipconfig: ' + iptext + '</p>').appendTo('.terminal-panel');
+        }
+
+        $('<p class="terminal__line">Execute: ' + cmd + '</p>').appendTo('.terminal-panel');
+        $('#search__input').val('');
+      });
+    }
+
+    // Init all
+    $(function(){
+      init();
+      // Find IP (best-effort)
+      try { findIP(addIP); } catch(e) {}
+
+      // Fetch rough country (best-effort; requires public IP)
+      try {
+        // If you want a real IP lookup, plug in your own service here.
+        // Placeholder: leaves country blank if blocked.
+      } catch(e){}
+
+      initSearchForm();
+    });
+  </script>
+</body>
+</html>
