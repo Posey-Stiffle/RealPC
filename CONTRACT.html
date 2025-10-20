@@ -261,32 +261,15 @@
   }
   .boot-text { margin: 5px 0; opacity: 0; animation: type-out 0.1s forwards; }
   @keyframes type-out { to { opacity: 1; } }
+/* Make <pre> blocks inside the terminal not add big left indents */
+.terminal-content pre{
+  white-space: pre-wrap;   /* keep your line breaks, allow wrapping */
+  margin: 12px 0;
+  padding: 0;              /* no extra left padding */
+  tab-size: 2;             /* if there are tabs, make them small */
+  -moz-tab-size: 2;        /* Firefox */
+}
 
-  /* ========================= */
-  /* Hexagon Gallery (scoped)  */
-  /* ========================= */
-
-  .gallery-wrap { padding: 12px 0; } /* light spacing in terminal */
-
-  .hex-grid {
-    --n-rows: 3;                 /* default (overridden by JS) */
-    --n-cols: 6;                 /* default (overridden by JS) */
-    --n: var(--n-cols);          /* fallback */
-    --l: calc(80vmin/var(--n, var(--n-cols))); /* a bit smaller inside terminal */
-    --hl: calc(.5*var(--l));
-    --ri: calc(.5*sqrt(3)*var(--l));
-
-    box-sizing: border-box;
-    display: grid;
-    place-content: center;
-    grid-template: repeat(var(--n-rows), var(--l)) / repeat(var(--n-cols), var(--ri));
-    gap: var(--hl) 0;
-    overflow: hidden;
-
-    /* no forced min-height here so it can sit inside the terminal card */
-    background: transparent;     /* so it blends with terminal */
-    filter: drop-shadow(2px 2px 5px rgba(255,0,0,0.15));
-  }
 
 
 </style>
