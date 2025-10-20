@@ -1,1 +1,597 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ARTIFACT_OS</title>
+<style>
+  :root {
+    --text-primary: #ff0000;
+    --text-dim: #800000;
+    --background: #000000;
+    --terminal-bg: #0a0a0a;
+    --shadow-red: rgba(255, 0, 0, 0.2);
+    --font-terminal: 'Courier New', monospace;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: none;
+  }
+
+  @font-face {
+    font-family: 'VT323';
+    src: url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-terminal);
+    line-height: 1.6;
+    overflow-y: auto;
+    min-height: 100vh;
+  }
+
+  /* Custom Cursor */
+  .cursor {
+    width: 12px;
+    height: 24px;
+    background: var(--text-primary);
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 9999;
+    animation: blink 1s infinite;
+    mix-blend-mode: difference;
+  }
+
+  /* CRT Effect */
+  .crt-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      rgba(255, 0, 0, 0.1) 50%,
+      rgba(0, 0, 0, 0.1) 50%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.15;
+  }
+
+  .screen-flicker {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--shadow-red);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 998;
+    animation: flicker 0.15s infinite;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+  }
+
+  /* Terminal Window */
+  .terminal {
+    background: var(--terminal-bg);
+    border: 2px solid var(--text-primary);
+    border-radius: 5px;
+    margin: 20px 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 20px var(--shadow-red);
+  }
+
+  .terminal-header {
+    background: var(--text-primary);
+    color: var(--background);
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+  }
+
+  .terminal-content {
+    padding: 20px;
+  }
+
+  /* (Optional) ASCII header helper if you add one later */
+  .ascii-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    white-space: pre;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.2;
+    margin: 20px auto;
+    color: var(--text-primary);
+    text-shadow: 0 0 10px var(--text-primary);
+    text-align: center;
+  }
+
+  /* Navigation */
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+  }
+
+  .nav-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-left: 2px solid var(--text-primary);
+    transition: all 0.3s;
+    opacity: 0.7;
+  }
+
+  .nav-link:hover {
+    opacity: 1;
+    padding-left: 20px;
+    background: var(--shadow-red);
+  }
+
+  .nav-link::before {
+    content: '>';
+    margin-right: 10px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .nav-link:hover::before {
+    opacity: 1;
+  }
+
+  /* Content Sections */
+  .content-section {
+    margin: 30px 0;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fade-in 0.5s forwards;
+  }
+
+  .glitch-text {
+    font-size: 2em;
+    position: relative;
+    margin: 20px 0;
+  }
+
+  .glitch-text::before,
+  .glitch-text::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--background);
+  }
+
+  .glitch-text::before {
+    left: 2px;
+    text-shadow: -2px 0 var(--text-primary);
+    animation: glitch-1 2s infinite linear alternate-reverse;
+  }
+
+  .glitch-text::after {
+    left: -2px;
+    text-shadow: 2px 0 var(--text-dim);
+    animation: glitch-2 3s infinite linear alternate-reverse;
+  }
+
+  /* Stats Display (kept for future sections) */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin: 20px 0;
+  }
+
+  .stat-item {
+    border: 1px solid var(--text-primary);
+    padding: 10px;
+    background: var(--shadow-red);
+  }
+
+  .stat-label {
+    font-size: 0.8em;
+    opacity: 0.7;
+  }
+
+  .stat-value {
+    font-size: 1.2em;
+    font-weight: bold;
+  }
+
+  /* Animations */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes flicker { 0%{opacity:.1} 50%{opacity:0} 100%{opacity:.1} }
+  @keyframes glitch-1 {
+    0%,100%{clip-path: inset(50% 0 30% 0)}
+    20%{clip-path: inset(20% 0 60% 0)}
+    40%{clip-path: inset(70% 0 10% 0)}
+    60%{clip-path: inset(10% 0 80% 0)}
+    80%{clip-path: inset(40% 0 40% 0)}
+  }
+  @keyframes glitch-2 {
+    0%,100%{clip-path: inset(40% 0 40% 0)}
+    20%{clip-path: inset(60% 0 20% 0)}
+    40%{clip-path: inset(20% 0 60% 0)}
+    60%{clip-path: inset(70% 0 10% 0)}
+    80%{clip-path: inset(10% 0 70% 0)}
+  }
+  @keyframes fade-in { to { opacity: 1; transform: translateY(0); } }
+
+  .marquee {
+    position: fixed;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 5px 0;
+    font-style: italic;
+    text-shadow: 0 0 5px #ff0000;
+    border: 1px solid #ff0000;
+    z-index: 1000;
+  }
+  .top-marquee { top: 0; border-bottom: 1px solid #ff0000; }
+  .bottom-marquee { bottom: 0; border-top: 1px solid #ff0000; }
+
+  /* Boot Screen (optional) */
+  .boot-screen {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    background: var(--background); color: var(--text-primary);
+    z-index: 1000; padding: 20px; font-family: var(--font-terminal);
+    overflow: hidden;
+  }
+  .boot-text { margin: 5px 0; opacity: 0; animation: type-out 0.1s forwards; }
+  @keyframes type-out { to { opacity: 1; } }
+
+  /* ========================= */
+  /* Hexagon Gallery (scoped)  */
+  /* ========================= */
+
+  .gallery-wrap { padding: 12px 0; } /* light spacing in terminal */
+
+  .hex-grid {
+    --n-rows: 3;                 /* default (overridden by JS) */
+    --n-cols: 6;                 /* default (overridden by JS) */
+    --n: var(--n-cols);          /* fallback */
+    --l: calc(80vmin/var(--n, var(--n-cols))); /* a bit smaller inside terminal */
+    --hl: calc(.5*var(--l));
+    --ri: calc(.5*sqrt(3)*var(--l));
+
+    box-sizing: border-box;
+    display: grid;
+    place-content: center;
+    grid-template: repeat(var(--n-rows), var(--l)) / repeat(var(--n-cols), var(--ri));
+    gap: var(--hl) 0;
+    overflow: hidden;
+
+    background: transparent;
+    filter: drop-shadow(2px 2px 5px rgba(255,0,0,0.15));
+  }
+
+  /* ========= Scoped terminal emulation block ========= */
+  .samurai-term {
+    position: relative;
+    margin-top: 20px;
+    border: 1px solid rgba(255,0,0,0.25);
+    padding: 12px;
+    background:
+      url("http://api.thumbr.it/whitenoise-200x200.png?background=00000000&noise=626262&density=15&opacity=15")
+      repeat;
+    background-size: 100px 100px;
+    color: #ff0000; /* theme red */
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  }
+
+  /* reuse existing blink animation name for caret; keep scoped element */
+  .samurai-term .blink {
+    opacity: 1;
+    animation: blink 1s linear infinite;
+  }
+
+  /* scanline effect (scoped + its own keyframes to avoid collisions) */
+  @keyframes scanline2 {
+    0.01% { height: 0; }
+    99.99% { height: 100%; }
+    100% { height: 0; }
+  }
+  .samurai-term .scanline {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.02);
+    animation: scanline2 8s linear infinite;
+    pointer-events: none;
+  }
+
+  /* the pre/code look */
+  .samurai-term pre.code {
+    margin: 0;
+    padding: 5px;
+    line-height: 1.1;
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-shadow: 0 0 5px rgba(255,255,255,0.3);
+  }
+
+  /* Optional big GLITCH headline you already had */
+  .glitch {
+    font-size: 3rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    position: relative;
+    text-shadow: 0.05em 0 0 rgba(255, 0, 0, 0.75),
+      -0.025em -0.05em 0 rgba(0, 255, 0, 0.75),
+      0.025em 0.05em 0 rgba(0, 0, 255, 0.75);
+    animation: glitch 500ms infinite;
+  }
+  .glitch span { position: absolute; top: 0; left: 0; }
+  .glitch span:first-child {
+    animation: glitch 650ms infinite;
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+    transform: translate(-0.025em, -0.0125em);
+    opacity: 0.8;
+  }
+  .glitch span:last-child {
+    animation: glitch 375ms infinite;
+    clip-path: polygon(0 80%, 100% 20%, 100% 100%, 0 100%);
+    transform: translate(0.0125em, 0.025em);
+    opacity: 0.8;
+  }
+  @keyframes glitch {
+    0%,14% {
+      text-shadow: 0.05em 0 0 rgba(255,0,0,.75),
+                   -0.05em -0.025em 0 rgba(0,255,0,.75),
+                   -0.025em 0.05em 0 rgba(0,0,255,.75);
+    }
+    15%,49% {
+      text-shadow: -0.05em -0.025em 0 rgba(255,0,0,.75),
+                   0.025em 0.025em 0 rgba(0,255,0,.75),
+                   -0.05em -0.05em 0 rgba(0,0,255,.75);
+    }
+    50%,99% {
+      text-shadow: 0.025em 0.05em 0 rgba(255,0,0,.75),
+                   0.05em 0 0 rgba(0,255,0,.75),
+                   0 -0.05em 0 rgba(0,0,255,.75);
+    }
+    100% {
+      text-shadow: -0.025em 0 0 rgba(255,0,0,.75),
+                   -0.025em -0.025em 0 rgba(0,255,0,.75),
+                   -0.025em -0.05em 0 rgba(0,0,255,.75);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-delay: -1ms !important;
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      background-attachment: initial !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0s !important;
+      transition-delay: 0s !important;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="cursor"></div>
+  <div class="crt-overlay"></div>
+  <div class="screen-flicker"></div>
+  <div class="container">
+    <div class="terminal">
+      <div class="terminal-header">
+        <span>ARTIFACT_OS:C/USER337C63/HOME/SOURCE.dat</span>
+        <span>[ ? | ! | X ]</span>
+      </div>
+
+      <div class="terminal-content">
+        <nav class="nav">
+          <div class="glitch-text" data-text="SOURCE.dat">SOURCE.dat</div>
+          <a href="index2.html" class="nav-link">> GO BACK</a>
+        </nav>
+
+        <h1 class="glitch">
+          <span aria-hidden="true">4th WALL BREAK AHEAD</span>
+          4th WALL BREAK AHEAD
+          <span aria-hidden="true">4th WALL BREAK AHEAD</span>
+        </h1>
+
+        <!-- ===== Injected Terminal Animation Block (scoped) ===== -->
+        <section class="samurai-term" aria-label="Samurai terminal">
+          <div class="scanline" aria-hidden="true"></div>
+          <pre class="code"><span class="blink">█</span></pre>
+        </section>
+        <!-- ===================================================== -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Custom cursor
+    const cursor = document.querySelector('.cursor');
+    document.addEventListener('mousemove', (e) => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+    });
+
+    // Random glitch streaks
+    function createGlitch() {
+      const glitch = document.createElement('div');
+      glitch.style.position = 'fixed';
+      glitch.style.top = Math.random() * 100 + 'vh';
+      glitch.style.left = Math.random() * 100 + 'vw';
+      glitch.style.width = Math.random() * 100 + 'px';
+      glitch.style.height = '1px';
+      glitch.style.background = 'var(--text-primary)';
+      glitch.style.zIndex = '1000';
+      document.body.appendChild(glitch);
+      setTimeout(() => glitch.remove(), 100);
+    }
+    setInterval(createGlitch, 3000);
+
+    // Terminal link hover scramble
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('mouseover', () => {
+        const chars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+        const originalText = link.textContent;
+        let interval = setInterval(() => {
+          link.textContent = originalText.split('').map((char) =>
+            Math.random() > 0.8 ? chars[Math.floor(Math.random() * chars.length)] : char
+          ).join('');
+        }, 50);
+        setTimeout(() => {
+          clearInterval(interval);
+          link.textContent = originalText;
+        }, 500);
+      });
+    });
+
+    /* ========= Scoped Samurai Terminal Script ========= */
+
+    const commands = String.raw`sequence found generating now...`;
+
+    const beep = String.raw`
+
+
+⢸⠉⠉⠉⠉⢻⠀⠉⠉⢻⠉⠉⢹⢿⣿⣿⣍⡉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⢹⡉⠉⠉⠉⠉⠉⠉⡉⠉⠉⢹⢩⡏⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⢻
+⢸⠀⠀⠀⠀⠈⣇⠀⠀⠸⡆⠁⢸⣎⠻⣿⣿⣿⣶⣔⡄⠀⠀⠀⠄⠐⠄⠀⣾⠇⠀⠀⠀⠀⠀⠠⠂⠀⠀⠜⣿⣠⠄⠀⣶⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⠀⠀⠀⠸⡄⠀⠀⣇⠀⠀⡏⠻⢾⣽⣿⣿⣿⣿⡂⠀⠀⠀⠀⠀⢺⡎⢀⣠⣆⣆⣠⣄⠤⣲⣞⣭⡕⢖⠋⠠⣶⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⠀⠀⠀⠀⢳⠀⠀⢹⠀⠀⡇⠘⠲⣽⣿⣿⣿⣿⣿⣷⠄⠐⠀⡠⣿⣵⣿⣿⣿⠿⠋⠁⠀⢗⣿⡿⠟⣛⢣⣀⣿⣿⠀⠀⢀⢀⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⠀⠀⠀⠀⠈⣇⠀⠘⡆⠀⢃⢿⣗⣺⣿⣿⡿⣿⣿⣿⣷⣥⢤⣼⣿⠟⠋⠛⠁⠀⠀⠀⠀⠀⠙⢠⢖⡂⠭⢹⣿⣿⣿⣿⣿⣿⡿⠋⣀⡤⣴⣶⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⠀⠀⠀⠀⠀⠸⡄⠀⢣⠀⢸⠈⠉⠛⠿⠟⠁⠀⠈⠉⠉⠙⠚⠛⠁⠀⠀⠀⠀⢠⣤⣤⡀⠀⠀⠘⢟⠗⠫⠥⣿⣿⡻⣿⣿⣟⣀⣀⣿⣮⣿⣻⣿⣿⠣⠀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⠀⠀⠀⠀⠀⠀⢣⠀⠘⡄⢸⠀⠀⠀⠀⠀⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠏⠀⠀⠀⠀⠀⠈⡜⢉⡩⣾⣿⣿⡟⢿⣿⣘⠋⣍⣿⣿⣼⣿⣯⡻⣷⠀⠀⠀⠀⠀⠀
+⢸⣈⠢⡀⠀⠀⠀⠀⠀⠈⣆⢰⢳⢸⠀⠀⠀⠀⠀⣇⡀⠀⠀⠀⠀⠀⠀⠀⡄⠀⡴⠃⠀⣀⡤⣶⣢⡤⠀⠀⠸⠺⢜⢾⣻⣿⡏⠳⣸⣿⣠⡫⠷⣼⣿⣿⣿⡯⡮⢚⠠⠆⠀⠀⢸
+⢸⣄⡉⠚⠦⣄⡀⠀⠀⠀⣼⣿⣄⣣⣄⠀⠀⠀⠀⢻⠋⠛⠷⠶⣦⣄⣐⣮⠃⡤⢂⡵⡎⢿⣿⣠⢽⠇⠀⠀⠀⠀⢿⡎⣹⣻⢷⠤⢵⣚⢷⣈⡹⢿⡿⢿⣟⣿⣚⢑⢀⢓⠀⡔⢺
+⢸⣷⣿⣯⣰⣾⣿⣿⣿⡿⣿⣿⠛⠛⠉⠀⠀⠀⠀⠈⡇⢠⢿⣿⡯⡽⢟⢳⠀⠣⠀⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⢸⣇⢵⢻⠿⠿⢿⣷⣿⣎⢻⣤⠸⣾⣽⣿⣷⡰⠚⡂⠤⣲⢼
+⢸⣿⣧⣬⣙⠟⠛⠿⠶⠶⣿⣟⡛⠛⢛⣓⣓⢒⠀⠀⣳⠀⠀⠀⠀⠁⠀⢨⠀⠀⠰⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠉⠋⣸⠒⠢⠤⣄⠉⠻⣦⣿⣏⣄⢈⣿⣿⣿⡮⡪⣾⣄⣾
+⢸⣿⣿⣯⣙⣷⣀⣀⣀⣸⣿⣏⣿⠻⠟⢻⣭⣹⠀⣀⣼⠀⠀⠀⠀⠀⠀⢠⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⠀⢸⠒⠚⠁⠀⠀⠀⠀⠈⠓⡆⠈⣿⣿⣿⣿⣿⣿⣽⣧⠀⢸⣷
+⢸⣿⢿⣟⠙⠉⠁⣼⣿⣿⣿⣿⣿⣷⣶⡯⠝⠋⠀⠈⣽⡄⠀⠀⠀⠀⠀⡜⠀⠀⠀⢀⡐⡄⠀⠀⠀⠀⠀⠀⡿⠀⢀⡇⠀⠀⠀⠀⢀⡴⠋⠁⣠⠞⠘⣿⣿⣿⣿⣿⣿⣷⣿⣿⣿
+⢸⣿⠘⠀⢠⣴⣶⣿⣿⣿⣷⣿⣧⠶⠀⢀⣠⣶⣿⣿⠿⠳⡀⠀⠀⠀⠀⠷⣤⠤⠞⠙⠓⠁⠀⠀⠀⠀⠀⣸⠀⠀⢸⡇⠀⢀⠞⠁⠀⣠⠎⠀⠀⠀⢸⣏⢾⣿⣿⣿⣿⣿⣽⣿⣿
+⢸⣇⠀⢸⣿⣿⣿⣿⣿⡟⠋⠁⣠⣴⣾⣿⣿⠟⠋⠁⠀⠀⠈⡶⣤⡀⠀⠀⠀⣄⡂⠀⠀⠀⠀⠀⠀⠀⠀⠊⠀⠀⡎⢣⢸⠀⠀⡴⠊⠀⠀⠀⠀⠀⠀⣯⣾⢺⣿⣿⣿⣿⣿⣿⣿
+⢸⣷⠀⠌⣿⣿⡿⠟⠉⣠⣶⣿⣿⡿⠟⠉⠀⠀⠀⠀⠀⠀⠀⠀⠹⡄⠀⡠⠒⠖⠊⠉⣉⣉⠝⠺⠀⠀⠀⠀⠀⣘⠀⠸⡆⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿
+⢸⣿⠀⢠⣿⣿⠀⠀⣼⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⢄⢵⡐⠒⠊⢉⣠⠴⠋⠀⠀⠀⠀⠀⢰⠏⠀⠀⡇⠀⢸⠉⠹⠀⠀⠀⠀⠀⠀⣟⠋⠉⠛⠛⠻⢿⣿⣿
+⢸⣿⡁⣿⣿⣿⣦⡀⢻⣿⣿⣿⣧⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢎⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⠀⠀⠀⢸⠀⠀⡇⠀⢡⠀⠀⠀⠀⠀⣿⠒⠧⡤⣤⠀⢽⡿⣿
+⢸⣿⣿⣿⣿⣿⣿⣿⣶⡀⢤⣄⠉⠈⢢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⠞⣡⠳⡀⠀⠀⠀⠀⠀⠀⠀⡰⠋⠀⢰⠀⠀⠀⢸⠀⠀⡇⠀⡇⠀⠀⡠⠊⠀⠀⠀⡇⡇⠅⠏⠲⣄⣿
+⢸⣿⣿⣿⣿⣟⣉⣿⣿⣿⣦⣍⠳⣄⣄⡇⠀⠀⠀⠀⠀⠀⠀⠀⣰⠋⠀⢰⠁⠀⠙⠦⣀⣀⡀⠤⠞⠁⠀⡠⠁⠀⠀⠀⠀⡇⠀⢸⡞⠀⡠⠃⠀⠀⢀⠔⡡⠊⡨⡨⠀⠀⠀⠈⠻
+⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⢻⣷⣄⣀⣀⣀⣀⣀⣰⣟⣀⣀⣀⣌⣀⣀⣀⣀⣀⣈⣙⣒⣘⣁⣠⣎⣀⣀⣀⣳⠀⣀⣧⠞⣀⣄⣀⣸⣰⣁⣀⣧⣇⣠⣠⣀⣀⣀⣩⣇⣸
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #`;
+
+    const samurai = String.raw`
+
+░░░░░░░░░░░░░░░░░░░░░▄▀░░▌
+░░░░░░░░░░░░░░░░░░░▄▀▐░░░▌
+░░░░░░░░░░░░░░░░▄▀▀▒▐▒░░░▌
+░░░░░▄▀▀▄░░░▄▄▀▀▒▒▒▒▌▒▒░░▌
+░░░░▐▒░░░▀▄▀▒▒▒▒▒▒▒▒▒▒▒▒▒█
+░░░░▌▒░░░░▒▀▄▒▒▒▒▒▒▒▒▒▒▒▒▒▀▄
+░░░░▐▒░░░░░▒▒▒▒▒▒▒▒▒▌▒▐▒▒▒▒▒▀▄
+░░░░▌▀▄░░▒▒▒▒▒▒▒▒▐▒▒▒▌▒▌▒▄▄▒▒▐
+░░░▌▌▒▒▀▒▒▒▒▒▒▒▒▒▒▐▒▒▒▒▒█▄█▌▒▒▌
+░▄▀▒▐▒▒▒▒▒▒▒▒▒▒▒▄▀█▌▒▒▒▒▒▀▀▒▒▐░░░▄
+▀▒▒▒▒▌▒▒▒▒▒▒▒▄▒▐███▌▄▒▒▒▒▒▒▒▄▀▀▀▀
+▒▒▒▒▒▐▒▒▒▒▒▄▀▒▒▒▀▀▀▒▒▒▒▄█▀░░▒▌▀▀▄▄
+▒▒▒▒▒▒█▒▄▄▀▒▒▒▒▒▒▒▒▒▒▒░░▐▒▀▄▀▄░░░░▀
+▒▒▒▒▒▒▒█▒▒▒▒▒▒▒▒▒▄▒▒▒▒▄▀▒▒▒▌░░▀▄
+▒▒▒▒▒▒▒▒▀▄▒▒▒▒▒▒▒▒▀▀▀▀▒▒▒▄▀
+
+`;
+
+    // Scope everything to the samurai-term section so it doesn't conflict
+    const termRoot = document.querySelector('.samurai-term');
+    let blink = termRoot.querySelector('.blink');
+    const code = termRoot.querySelector('.code');
+
+    const RandomNumber = (min, max) => (
+      Math.floor(Math.random() * max) + min
+    );
+
+    const Delay = (time) => new Promise((resolve) => setTimeout(resolve, time));
+
+    const ResetTerminal = () => {
+      code.innerHTML = '<span class="blink">█</span>';
+      blink = termRoot.querySelector('.blink');
+    };
+
+    const RenderString = (characters) => {
+      blink.insertAdjacentHTML('beforeBegin', characters);
+    };
+
+    const TypeString = async (characters) => {
+      for (const character of characters.split('')) {
+        await Delay(RandomNumber(30, 100));
+        RenderString(character);
+      }
+    };
+
+    const DrawLines = async (characters, min = 50, max = 500) => {
+      for (const line of characters.split('\n')) {
+        await Delay(RandomNumber(min, max));
+        RenderString(`${line}\n`);
+      }
+    };
+
+    const DrawCommands = async (cmds) => {
+      for (const line of cmds.split('\n')) {
+        const [currentDir, command] = line.split(':~ ');
+        RenderString(`${currentDir}:~ `);
+        await TypeString(command || '');
+        RenderString('\n');
+      }
+    };
+
+    // Start the code
+    (async () => {
+      await DrawCommands("/PRINT CREDIT SEQUENCE");
+      await Delay(1000);
+      RenderString("password:");
+      await Delay(1000);
+      RenderString("meows");
+      await Delay(1000);
+      RenderString("\n");
+      await DrawCommands(commands);
+      RenderString('\ncredit list.js    forward.js\n\n');
+      await DrawLines(beep);
+      await TypeString("\n While I do have a decent understanding of HTML and CSS, I do not have enough of an understanding of those languages to make a website of this calibur from scratch. Externial resources, Code pen, Code Shack, Tumblr and Chat GPT were used in the development of this website. Chat GPT was used in the creation of this website in order to merge the terminal interface code with the code snippets found on code pen. Below is list to credit the original creators and websites used in the creation of artifact_OS.");
+      RenderString('\n ');    
+      await TypeString("\n Overall terminal theme: https://www.tumblr.com/numbpill" );      
+      await TypeString("\n Color picker: https://html-color.codes/" );      
+      await TypeString("\n Live code editor: https://codeshack.io/code-editor/" );     
+      await TypeString("\n Chat GPT: https://chatgpt.com" ); 
+      await TypeString("\n David Martinez ASCII art: https://emojicombos.com/cyberpunk-2077-ascii-art" );     
+      await TypeString("\n David Martinez ASCII art: https://emojicombos.com/cat.-text-art" );           
+      await TypeString("\n Glitch text effect: https://codepen.io/kevinpowell/pen/YzqerQm" );     
+      await TypeString("\n Glitch image effect: https://codepen.io/MinzCode/pen/YzqwbQV" );     
+      await TypeString("\n Terminal interface: https://codepen.io/alex-page/pen/zVYBxb" );     
+      await TypeString("\n Hexagon image gallery: https://codepen.io/thebabydino/pen/PowXYpV" );     
+      await TypeString("\n Fake terminal (white): https://codepen.io/arcticben/pen/OWYyeo" );     
+      await TypeString("\n Infinte ocean: https://codepen.io/jkantner/pen/aqXobr" );     
+
+
+await Delay(3000);
+      ResetTerminal();
+      await DrawLines(samurai);
+    })();
+  </script>
+</body>
+</html>
