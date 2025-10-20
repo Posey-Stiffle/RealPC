@@ -1,1 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ARTIFACT_OS</title>
+<style>
+  :root {
+    --text-primary: #ff0000;
+    --text-dim: #800000;
+    --background: #000000;
+    --terminal-bg: #0a0a0a;
+    --shadow-red: rgba(255, 0, 0, 0.2);
+    --font-terminal: 'Courier New', monospace;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: none;
+  }
+
+  @font-face {
+    font-family: 'VT323';
+    src: url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-terminal);
+    line-height: 1.6;
+    overflow-y: auto;
+    min-height: 100vh;
+  }
+
+  /* Custom Cursor */
+  .cursor {
+    width: 12px;
+    height: 24px;
+    background: var(--text-primary);
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 9999;
+    animation: blink 1s infinite;
+    mix-blend-mode: difference;
+  }
+
+  /* CRT Effect */
+  .crt-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      rgba(255, 0, 0, 0.1) 50%,
+      rgba(0, 0, 0, 0.1) 50%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.15;
+  }
+
+  .screen-flicker {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--shadow-red);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 998;
+    animation: flicker 0.15s infinite;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+  }
+
+  /* Terminal Window */
+  .terminal {
+    background: var(--terminal-bg);
+    border: 2px solid var(--text-primary);
+    border-radius: 5px;
+    margin: 20px 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 20px var(--shadow-red);
+  }
+
+  .terminal-header {
+    background: var(--text-primary);
+    color: var(--background);
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+  }
+
+  .terminal-content {
+    padding: 20px;
+  }
+
+  /* Navigation */
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+  }
+
+  .nav-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-left: 2px solid var(--text-primary);
+    transition: all 0.3s;
+    opacity: 0.7;
+  }
+
+  .nav-link:hover {
+    opacity: 1;
+    padding-left: 20px;
+    background: var(--shadow-red);
+  }
+
+  .nav-link::before {
+    content: '>';
+    margin-right: 10px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .nav-link:hover::before {
+    opacity: 1;
+  }
+
+  /* Content Sections */
+  .content-section {
+    margin: 30px 0;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fade-in 0.5s forwards;
+  }
+
+  .glitch-text {
+    font-size: 2em;
+    position: relative;
+    margin: 20px 0;
+  }
+
+  .glitch-text::before,
+  .glitch-text::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--background);
+  }
+
+  .glitch-text::before {
+    left: 2px;
+    text-shadow: -2px 0 var(--text-primary);
+    animation: glitch-1 2s infinite linear alternate-reverse;
+  }
+
+  .glitch-text::after {
+    left: -2px;
+    text-shadow: 2px 0 var(--text-dim);
+    animation: glitch-2 3s infinite linear alternate-reverse;
+  }
+
+  /* Animations */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes flicker { 0%{opacity:.1} 50%{opacity:0} 100%{opacity:.1} }
+  @keyframes glitch-1 {
+    0%,100%{clip-path: inset(50% 0 30% 0)}
+    20%{clip-path: inset(20% 0 60% 0)}
+    40%{clip-path: inset(70% 0 10% 0)}
+    60%{clip-path: inset(10% 0 80% 0)}
+    80%{clip-path: inset(40% 0 40% 0)}
+  }
+  @keyframes glitch-2 {
+    0%,100%{clip-path: inset(40% 0 40% 0)}
+    20%{clip-path: inset(60% 0 20% 0)}
+    40%{clip-path: inset(20% 0 60% 0)}
+    60%{clip-path: inset(70% 0 10% 0)}
+    80%{clip-path: inset(10% 0 70% 0)}
+  }
+  @keyframes fade-in { to { opacity: 1; transform: translateY(0); } }
+
+  /* ===== Glitch panel container (INSIDE terminal) ===== */
+  .glitch-wrap {
+    border: 1px solid rgba(255,0,0,0.25);
+    background: #000;
+    overflow: hidden;                 /* keep canvas clipped to the panel */
+    position: relative;
+    width: 100%;
+    height: 440px;                    /* adjust panel height here */
+  }
+  .glitch-wrap canvas {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;           /* make p5 canvas fill the panel */
+    height: 100% !important;
+  }
+</style>
+</head>
+<body>
+  <div class="cursor"></div>
+  <div class="crt-overlay"></div>
+  <div class="screen-flicker"></div>
+
+  <br><br>
+
+  <div class="container">
+    <div class="terminal">
+      <div class="terminal-header">
+        <span>ARTIFACT_OS:C/USER337C63/HOME/QUANTUM_VEIN_MODEL.mat</span>
+        <span>[ ? | ! | X ]</span>
+      </div>
+
+      <div class="terminal-content">
+        <nav class="nav">
+          <div class="glitch-text" data-text="QUANTUM_VEIN_MODEL.mat">QUANTUM_VEIN_MODEL.mat</div>
+          <a href="index2.html" class="nav-link">> GO BACK</a>
+        </nav>
+
+        <!-- ========= Glitch Canvas Panel (paste and go) ========= -->
+        <div class="content-section">
+          <div id="glitch-panel" class="glitch-wrap"></div>
+        </div>
+        <!-- ====================================================== -->
+
+      </div>
+    </div>
+  </div>
+
+  <br>
+
+  <!-- p5.js for glitch sketch -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+
+  <script>
+    // Custom cursor
+    const cursor = document.querySelector('.cursor');
+    document.addEventListener('mousemove', (e) => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+    });
+
+    // ---------- P5 GLITCH (scoped to #glitch-panel) ----------
+    (function(){
+      const imgSrc = 'https://i.imgur.com/UnFjwSj.png'; // your image
+      const panel = document.getElementById('glitch-panel');
+
+      // Instance mode to avoid global conflicts
+      new p5((p) => {
+        let glitch;
+        let isLoaded = false;
+
+        p.setup = function() {
+          const { w, h } = panelSize();
+          p.createCanvas(w, h);
+          p.background(0);
+          p.loadImage(imgSrc, (img) => {
+            glitch = new Glitch(img, p);
+            isLoaded = true;
+          });
+        };
+
+        p.windowResized = function() {
+          const { w, h } = panelSize();
+          p.resizeCanvas(w, h);
+        };
+
+        p.draw = function() {
+          p.clear();
+          p.background(0);
+          if (isLoaded) glitch.show();
+        };
+
+        function panelSize() {
+          // get current panel size
+          const rect = panel.getBoundingClientRect();
+          const w = Math.max(100, Math.floor(rect.width));
+          const h = Math.max(100, Math.floor(rect.height));
+          return { w, h };
+        }
+
+        class Glitch {
+          constructor(img, p5) {
+            this.p = p5;
+            this.channelLen = 4;
+            this.imgOrigin = img;
+            this.imgOrigin.loadPixels();
+            this.copyData = new Uint8ClampedArray(this.imgOrigin.pixels);
+
+            this.throughFlag = true;
+
+            // more flow lines / shifts / scatters for heavier glitch
+            this.flowLineImgs = [];
+            for (let i = 0; i < 3; i++) {
+              this.flowLineImgs.push({
+                pixels: null,
+                t1: this.p.floor(this.p.random(0, 1000)),
+                speed: this.p.floor(this.p.random(8, 28)),   // faster
+                randX: this.p.floor(this.p.random(40, 120))  // brighter streak
+              });
+            }
+
+            this.shiftLineImgs = new Array(10).fill(null);   // more lines
+            this.shiftRGBs = new Array(2).fill(null);        // more RGB passes
+
+            this.scatImgs = [];
+            for (let i = 0; i < 6; i++) {                    // more scatter tiles
+              this.scatImgs.push({ img: null, x: 0, y: 0 });
+            }
+          }
+
+          replaceData(destImg, srcPixels) {
+            for (let y = 0; y < destImg.height; y++) {
+              for (let x = 0; x < destImg.width; x++) {
+                const index = (y * destImg.width + x) * this.channelLen;
+                destImg.pixels[index]     = srcPixels[index];
+                destImg.pixels[index + 1] = srcPixels[index + 1];
+                destImg.pixels[index + 2] = srcPixels[index + 2];
+                destImg.pixels[index + 3] = srcPixels[index + 3];
+              }
+            }
+            destImg.updatePixels();
+          }
+
+          flowLine(srcImg, obj) {
+            const destPixels = new Uint8ClampedArray(srcImg.pixels);
+            obj.t1 %= srcImg.height;
+            obj.t1 += obj.speed;
+            const tempY = this.p.floor(obj.t1);
+            for (let y = 0; y < srcImg.height; y++) {
+              if (tempY === y) {
+                for (let x = 0; x < srcImg.width; x++) {
+                  const index = (y * srcImg.width + x) * this.channelLen;
+                  destPixels[index]     = srcImg.pixels[index]     + obj.randX;
+                  destPixels[index + 1] = srcImg.pixels[index + 1] + obj.randX;
+                  destPixels[index + 2] = srcImg.pixels[index + 2] + obj.randX;
+                  destPixels[index + 3] = srcImg.pixels[index + 3];
+                }
+              }
+            }
+            return destPixels;
+          }
+
+          shiftLine(srcImg) {
+            const destPixels = new Uint8ClampedArray(srcImg.pixels);
+            const rangeH = srcImg.height;
+            const rangeMin = this.p.floor(this.p.random(0, rangeH));
+            const rangeMax = rangeMin + this.p.floor(this.p.random(1, rangeH - rangeMin));
+            const offsetX = this.channelLen * this.p.floor(this.p.random(-80, 80)); // larger offsets
+
+            for (let y = 0; y < srcImg.height; y++) {
+              if (y > rangeMin && y < rangeMax) {
+                for (let x = 0; x < srcImg.width; x++) {
+                  const index = (y * srcImg.width + x) * this.channelLen;
+                  const r2 = (index + offsetX);
+                  const g2 = (index + 1 + offsetX);
+                  const b2 = (index + 2 + offsetX);
+                  destPixels[index]     = srcImg.pixels[(r2 + srcImg.pixels.length) % srcImg.pixels.length];
+                  destPixels[index + 1] = srcImg.pixels[(g2 + srcImg.pixels.length) % srcImg.pixels.length];
+                  destPixels[index + 2] = srcImg.pixels[(b2 + srcImg.pixels.length) % srcImg.pixels.length];
+                  destPixels[index + 3] = srcImg.pixels[index + 3];
+                }
+              }
+            }
+            return destPixels;
+          }
+
+          shiftRGB(srcImg) {
+            const destPixels = new Uint8ClampedArray(srcImg.pixels);
+            const range = 28; // bigger jumps
+            const randR = (this.p.floor(this.p.random(-range, range)) * srcImg.width + this.p.floor(this.p.random(-range, range))) * this.channelLen;
+            const randG = (this.p.floor(this.p.random(-range, range)) * srcImg.width + this.p.floor(this.p.random(-range, range))) * this.channelLen;
+            const randB = (this.p.floor(this.p.random(-range, range)) * srcImg.width + this.p.floor(this.p.random(-range, range))) * this.channelLen;
+
+            for (let y = 0; y < srcImg.height; y++) {
+              for (let x = 0; x < srcImg.width; x++) {
+                const index = (y * srcImg.width + x) * this.channelLen;
+                const r2 = (index + randR + srcImg.pixels.length) % srcImg.pixels.length;
+                const g2 = (index + 1 + randG + srcImg.pixels.length) % srcImg.pixels.length;
+                const b2 = (index + 2 + randB + srcImg.pixels.length) % srcImg.pixels.length;
+                destPixels[index]     = srcImg.pixels[r2];
+                destPixels[index + 1] = srcImg.pixels[g2];
+                destPixels[index + 2] = srcImg.pixels[b2];
+                destPixels[index + 3] = srcImg.pixels[index + 3];
+              }
+            }
+            return destPixels;
+          }
+
+          getRandomRectImg(srcImg) {
+            const startX = this.p.floor(this.p.random(0, Math.max(1, srcImg.width - 40)));
+            const startY = this.p.floor(this.p.random(0, Math.max(1, srcImg.height - 60)));
+            const rectW  = this.p.floor(this.p.random(20, Math.max(21, srcImg.width - startX)));
+            const rectH  = this.p.floor(this.p.random(6, 90)); // taller strips
+            const destImg = srcImg.get(startX, startY, rectW, rectH);
+            destImg.loadPixels();
+            return destImg;
+          }
+
+          show() {
+            const p = this.p;
+
+            // restore original
+            this.replaceData(this.imgOrigin, this.copyData);
+
+            // shorter clean periods (glitch more often)
+            const n = p.floor(p.random(100));
+            if (n > 85 && this.throughFlag) {     // fewer “through” frames
+              this.throughFlag = false;
+              setTimeout(() => { this.throughFlag = true; }, p.floor(p.random(20, 220)));
+            }
+            if (!this.throughFlag) {
+              p.push();
+              p.translate((p.width - this.imgOrigin.width) / 2, (p.height - this.imgOrigin.height) / 2);
+              p.image(this.imgOrigin, 0, 0);
+              p.pop();
+              return;
+            }
+
+            // flow lines (always run)
+            this.flowLineImgs.forEach((o, i, arr) => {
+              arr[i].pixels = this.flowLine(this.imgOrigin, o);
+              if (arr[i].pixels) this.replaceData(this.imgOrigin, arr[i].pixels);
+            });
+
+            // shift lines (higher chance)
+            this.shiftLineImgs.forEach((v, i, arr) => {
+              if (p.floor(p.random(100)) > 30) {
+                arr[i] = this.shiftLine(this.imgOrigin);
+                this.replaceData(this.imgOrigin, arr[i]);
+              } else if (arr[i]) {
+                this.replaceData(this.imgOrigin, arr[i]);
+              }
+            });
+
+            // shift RGB (more frequent)
+            this.shiftRGBs.forEach((v, i, arr) => {
+              if (p.floor(p.random(100)) > 40) {
+                arr[i] = this.shiftRGB(this.imgOrigin);
+                this.replaceData(this.imgOrigin, arr[i]);
+              }
+            });
+
+            // draw base image centered
+            p.push();
+            p.translate((p.width - this.imgOrigin.width) / 2, (p.height - this.imgOrigin.height) / 2);
+            p.image(this.imgOrigin, 0, 0);
+            p.pop();
+
+            // scatter tiles (more and wider spread)
+            this.scatImgs.forEach((obj) => {
+              p.push();
+              p.translate((p.width - this.imgOrigin.width) / 2, (p.height - this.imgOrigin.height) / 2);
+              if (p.floor(p.random(100)) > 60) {
+                obj.x = p.floor(p.random(-this.imgOrigin.width * 0.35, this.imgOrigin.width * 0.8));
+                obj.y = p.floor(p.random(-this.imgOrigin.height * 0.2, this.imgOrigin.height));
+                obj.img = this.getRandomRectImg(this.imgOrigin);
+              }
+              if (obj.img) p.image(obj.img, obj.x, obj.y);
+              p.pop();
+            });
+          }
+        }
+      }, panel);
+    })();
+
+    // Random page “glitch streaks” (your earlier effect)
+    function createGlitch() {
+      const glitch = document.createElement('div');
+      glitch.style.position = 'fixed';
+      glitch.style.top = Math.random() * 100 + 'vh';
+      glitch.style.left = Math.random() * 100 + 'vw';
+      glitch.style.width = Math.random() * 100 + 'px';
+      glitch.style.height = '1px';
+      glitch.style.background = 'var(--text-primary)';
+      glitch.style.zIndex = '1000';
+      document.body.appendChild(glitch);
+      setTimeout(() => glitch.remove(), 100);
+    }
+    setInterval(createGlitch, 3000);
+
+    // Terminal link hover scramble
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('mouseover', () => {
+        const chars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+        const originalText = link.textContent;
+        let interval = setInterval(() => {
+          link.textContent = originalText.split('').map((char) =>
+            Math.random() > 0.8 ? chars[Math.floor(Math.random() * chars.length)] : char
+          ).join('');
+        }, 50);
+        setTimeout(() => { clearInterval(interval); link.textContent = originalText; }, 500);
+      });
+    });
+  </script>
+</body>
+</html>
 
